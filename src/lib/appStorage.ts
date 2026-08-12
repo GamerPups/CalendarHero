@@ -1,4 +1,8 @@
-import type { EventColor } from './calendar-utils'
+import {
+  createDefaultCategoryColors,
+  type EventCategory,
+  type EventColor,
+} from './calendar-utils'
 
 const STORAGE_KEY = 'calendar-hero-state-v3'
 
@@ -16,6 +20,7 @@ type StoredEvent = {
   date: string
   time?: string
   color: EventColor
+  category?: EventCategory
   sharedVisible?: boolean
 }
 
@@ -26,6 +31,8 @@ export type PersistedAppState = {
   events: StoredEvent[]
   personalVisibilityByShared: Record<string, string[]>
   defaultEventColor: EventColor
+  defaultEventCategory?: EventCategory
+  categoryColors?: Partial<Record<EventCategory, EventColor>>
 }
 
 export function createDefaultPersonalCalendar(): StoredCalendar {
@@ -46,6 +53,8 @@ export function createEmptyAppState(): PersistedAppState {
     events: [],
     personalVisibilityByShared: {},
     defaultEventColor: 'cyan',
+    defaultEventCategory: 'other',
+    categoryColors: createDefaultCategoryColors(),
   }
 }
 
@@ -74,9 +83,15 @@ export function loadPersistedAppState(): PersistedAppState | null {
       events: (parsed.events ?? []).map((event) => ({
         ...event,
         sharedVisible: event.sharedVisible ?? false,
+        category: event.category ?? undefined,
       })),
       personalVisibilityByShared: parsed.personalVisibilityByShared ?? {},
       defaultEventColor: parsed.defaultEventColor ?? 'cyan',
+      defaultEventCategory: parsed.defaultEventCategory ?? 'other',
+      categoryColors: {
+        ...createDefaultCategoryColors(),
+        ...(parsed.categoryColors ?? {}),
+      },
     }
   } catch {
     return null

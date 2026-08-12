@@ -2,7 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { useCalendars, type UserCalendar } from '../hooks/useCalendars'
 import { formatShareCode } from '../lib/shareCode'
 import { resolvePersonalSelection } from '../lib/sharedVisibility'
-import { EVENT_COLOR_PALETTE } from '../lib/calendar-utils'
+import {
+  EVENT_CATEGORIES,
+  EVENT_COLOR_GROUPS,
+  getEventCategoryMeta,
+  getEventColorMeta,
+  type EventCategory,
+  type EventColor,
+} from '../lib/calendar-utils'
+import { CategorySelect } from './CategorySelect'
 
 type ModalProps = {
   title: string
@@ -356,7 +364,7 @@ export function CalendarActionBar({ onAddEvent }: { onAddEvent: () => void }) {
           + Personal calendar
         </button>
         <button type="button" className="action-btn" onClick={() => setShowColorPicker(true)}>
-          Event colors
+          Settings
         </button>
       </div>
       {showCreateShared && (
@@ -369,8 +377,11 @@ export function CalendarActionBar({ onAddEvent }: { onAddEvent: () => void }) {
       {showAddPersonal && <AddPersonalCalendarModal onClose={() => setShowAddPersonal(false)} />}
       {showColorPicker && (
         <div className="modal-backdrop" onClick={() => setShowColorPicker(false)}>
-          <div className="color-popover color-popover-modal" onClick={(e) => e.stopPropagation()}>
-            <ColorPickerPopoverInline onClose={() => setShowColorPicker(false)} />
+          <div
+            className="color-popover color-popover-modal category-settings-popover"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CategorySettingsPopover onClose={() => setShowColorPicker(false)} />
           </div>
         </div>
       )}
@@ -378,31 +389,105 @@ export function CalendarActionBar({ onAddEvent }: { onAddEvent: () => void }) {
   )
 }
 
-function ColorPickerPopoverInline({ onClose }: { onClose: () => void }) {
-  const { activeCalendar, defaultEventColor, setDefaultEventColor } = useCalendars()
+function CategorySettingsPopover({ onClose }: { onClose: () => void }) {
+  const {
+    defaultEventCategory,
+    setDefaultEventCategory,
+    getCategoryColor,
+    setCategoryColor,
+  } = useCalendars()
+  const [editingCategory, setEditingCategory] = useState<EventCategory | null>(null)
+
+  if (editingCategory) {
+    const categoryMeta = getEventCategoryMeta(editingCategory)
+    const selectedColor = getCategoryColor(editingCategory)
+
+    return (
+      <>
+        <div className="color-popover-header">
+          <button
+            type="button"
+            className="category-settings-back"
+            onClick={() => setEditingCategory(null)}
+          >
+            ← Back
+          </button>
+          <span className="color-popover-title">{categoryMeta.label}</span>
+          <button type="button" className="color-popover-close" onClick={onClose}>
+            ×
+          </button>
+        </div>
+        <p className="color-popover-subtitle">Pick the automatic color for this category.</p>
+        {EVENT_COLOR_GROUPS.map((group) => (
+          <div key={group.id} className="category-color-group">
+            <p className="category-color-group-label">{group.label}</p>
+            <div className="color-swatches color-swatches-grid">
+              {group.colors.map((colorId) => {
+                const color = getEventColorMeta(colorId)
+                return (
+                  <button
+                    key={colorId}
+                    type="button"
+                    className={`color-swatch${selectedColor === colorId ? ' selected' : ''}`}
+                    style={{ background: color.hex }}
+                    title={color.label}
+                    aria-label={color.label}
+                    onClick={() => {
+                      setCategoryColor(editingCategory, colorId as EventColor)
+                      setEditingCategory(null)
+                    }}
+                  />
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </>
+    )
+  }
 
   return (
     <>
       <div className="color-popover-header">
-        <span className="color-popover-title">{activeCalendar.name}</span>
+        <span className="color-popover-title">Settings</span>
         <button type="button" className="color-popover-close" onClick={onClose}>
           ×
         </button>
       </div>
-      <p className="color-popover-subtitle">Default color for new events</p>
-      <div className="color-swatches color-swatches-grid">
-        {EVENT_COLOR_PALETTE.map((color) => (
-          <button
-            key={color.id}
-            type="button"
-            className={`color-swatch${color.id === defaultEventColor ? ' selected' : ''}`}
-            style={{ background: color.hex }}
-            title={color.label}
-            aria-label={color.label}
-            onClick={() => setDefaultEventColor(color.id)}
-          />
-        ))}
-      </div>
+
+      <section className="category-settings-section">
+        <h3 className="category-settings-heading">Default category</h3>
+        <p className="color-popover-subtitle">Used for new events when no category is picked.</p>
+        <CategorySelect value={defaultEventCategory} onChange={setDefaultEventCategory} />
+      </section>
+
+      <section className="category-settings-section">
+        <h3 className="category-settings-heading">Category colors</h3>
+        <p className="color-popover-subtitle">Set the automatic color for each category.</p>
+        <ul className="category-settings-list">
+          {EVENT_CATEGORIES.map((category) => {
+            const color = getEventColorMeta(getCategoryColor(category.id))
+            return (
+              <li key={category.id}>
+                <button
+                  type="button"
+                  className="category-settings-row"
+                  onClick={() => setEditingCategory(category.id)}
+                >
+                  <span className="category-settings-row-main">
+                    <span
+                      className="default-category-dot"
+                      style={{ background: color.hex }}
+                    />
+                    {category.label}
+                  </span>
+                  <span className="category-settings-color-label">{color.label}</span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      </section>
     </>
   )
 }

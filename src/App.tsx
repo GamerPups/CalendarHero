@@ -3,7 +3,6 @@ import { useIsMobileLayout } from './hooks/use-media-query'
 import { DesktopShell } from './DesktopShell'
 import { MobileShell } from './components/mobile/MobileShell'
 import './styles/global.css'
-import './styles/mobile.css'
 
 function AppRouter() {
   const isMobile = useIsMobileLayout()

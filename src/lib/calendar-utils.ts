@@ -27,6 +27,44 @@ export const EVENT_COLOR_PALETTE = [
 
 export type EventColor = (typeof EVENT_COLOR_PALETTE)[number]['id']
 
+export const EVENT_COLOR_GROUPS = [
+  { id: 'blues', label: 'Blues', colors: ['cyan', 'sky', 'blue', 'indigo', 'navy'] as EventColor[] },
+  {
+    id: 'purples',
+    label: 'Purples',
+    colors: ['violet', 'purple', 'fuchsia', 'lavender', 'magenta'] as EventColor[],
+  },
+  {
+    id: 'pinks-reds',
+    label: 'Pinks & reds',
+    colors: ['pink', 'rose', 'red', 'coral', 'crimson'] as EventColor[],
+  },
+  {
+    id: 'warm',
+    label: 'Warm',
+    colors: ['orange', 'amber', 'yellow', 'gold'] as EventColor[],
+  },
+  {
+    id: 'greens',
+    label: 'Greens & teals',
+    colors: ['lime', 'green', 'emerald', 'teal', 'mint'] as EventColor[],
+  },
+] as const
+
+export const EVENT_CATEGORIES = [
+  { id: 'work', label: 'Work', defaultColor: 'blue' as EventColor },
+  { id: 'personal', label: 'Personal', defaultColor: 'purple' as EventColor },
+  { id: 'social', label: 'Social', defaultColor: 'pink' as EventColor },
+  { id: 'health', label: 'Health', defaultColor: 'green' as EventColor },
+  { id: 'travel', label: 'Travel', defaultColor: 'amber' as EventColor },
+  { id: 'important', label: 'Important', defaultColor: 'red' as EventColor },
+  { id: 'other', label: 'Other', defaultColor: 'cyan' as EventColor },
+] as const
+
+export type EventCategory = (typeof EVENT_CATEGORIES)[number]['id']
+
+export const DEFAULT_EVENT_CATEGORY: EventCategory = 'other'
+
 export const EVENT_COLORS: EventColor[] = EVENT_COLOR_PALETTE.map((color) => color.id)
 
 export const SWATCH_COLORS = EVENT_COLOR_PALETTE.map((color) => color.hex)
@@ -43,6 +81,68 @@ export function normalizeEventColor(value: unknown): EventColor {
 
 export function getEventColorMeta(color: EventColor) {
   return EVENT_COLOR_PALETTE.find((entry) => entry.id === color) ?? EVENT_COLOR_PALETTE[0]
+}
+
+export function getEventCategoryMeta(category: EventCategory) {
+  return EVENT_CATEGORIES.find((entry) => entry.id === category) ?? EVENT_CATEGORIES[0]
+}
+
+export function isEventCategory(value: unknown): value is EventCategory {
+  return typeof value === 'string' && EVENT_CATEGORIES.some((entry) => entry.id === value)
+}
+
+export function normalizeEventCategory(value: unknown): EventCategory {
+  return isEventCategory(value) ? value : DEFAULT_EVENT_CATEGORY
+}
+
+export function getDefaultColorForCategory(
+  category: EventCategory,
+  categoryColors?: Partial<Record<EventCategory, EventColor>>,
+): EventColor {
+  if (categoryColors?.[category]) return categoryColors[category]!
+  return getEventCategoryMeta(category).defaultColor
+}
+
+export function createDefaultCategoryColors(): Record<EventCategory, EventColor> {
+  return EVENT_CATEGORIES.reduce(
+    (colors, category) => {
+      colors[category.id] = category.defaultColor
+      return colors
+    },
+    {} as Record<EventCategory, EventColor>,
+  )
+}
+
+export function addDaysToIsoDate(date: string, days: number): string {
+  const parsed = parseIsoDate(date)
+  const cursor = new Date(parsed.year, parsed.month, parsed.day)
+  cursor.setDate(cursor.getDate() + days)
+  return toIsoDate(cursor.getFullYear(), cursor.getMonth(), cursor.getDate())
+}
+
+export function formatAgendaDayHeader(date: string, today: string): string {
+  const { year, month, day } = parseIsoDate(date)
+  const weekday = new Date(year, month, day).toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase()
+  const monthDay = new Date(year, month, day).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })
+  if (date === today) return `${weekday} · ${monthDay} (Today)`
+  if (date === addDaysToIsoDate(today, 1)) return `${weekday} · ${monthDay} (Tomorrow)`
+  return `${weekday} · ${monthDay}`
+}
+
+export function parseEventMinutes(time?: string): number | null {
+  if (!time?.trim()) return null
+  const match = time.trim().match(/^(\d{1,2}):(\d{2})$/)
+  if (!match) return null
+  return Number(match[1]) * 60 + Number(match[2])
+}
+
+export function getCurrentMinutes(): number {
+  const now = new Date()
+  return now.getHours() * 60 + now.getMinutes()
+}
+
+export function inferCategoryFromColor(color: EventColor): EventCategory {
+  return EVENT_CATEGORIES.find((entry) => entry.defaultColor === color)?.id ?? DEFAULT_EVENT_CATEGORY
 }
 
 export function getEventChipStyle(color: EventColor): {

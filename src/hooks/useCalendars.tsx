@@ -9,7 +9,10 @@ import {
 } from 'react'
 import { generateShareCode, formatShareCode } from '../lib/shareCode'
 import {
+  type EventCategory,
   type EventColor,
+  getDefaultColorForCategory,
+  normalizeEventCategory,
   normalizeEventColor,
   formatMonthTitle,
   parseIsoDate,
@@ -27,6 +30,7 @@ import {
   loadPersistedAppState,
   savePersistedAppState,
 } from '../lib/appStorage'
+import { createDefaultCategoryColors } from '../lib/calendar-utils'
 
 export type CalendarKind = 'personal' | 'shared'
 
@@ -44,6 +48,7 @@ export type UserEvent = {
   date: string
   time?: string
   color: EventColor
+  category?: EventCategory
   sharedVisible?: boolean
 }
 
@@ -52,6 +57,7 @@ export type CalendarChatContext = {
   viewMonth: string
   activeCalendar: UserCalendar
   defaultEventColor: EventColor
+  defaultEventCategory: EventCategory
   personalCalendars: UserCalendar[]
   sharedCalendars: UserCalendar[]
   events: Array<UserEvent & { calendarName: string }>
@@ -59,6 +65,7 @@ export type CalendarChatContext = {
 
 type AddEventOptions = {
   calendarId?: string
+  category?: EventCategory
   color?: EventColor
   time?: string
   sharedVisible?: boolean
@@ -68,6 +75,7 @@ type UpdateEventInput = {
   title?: string
   date?: string
   time?: string
+  category?: EventCategory
   color?: EventColor
   sharedVisible?: boolean
 }
@@ -85,7 +93,12 @@ type CalendarsContextValue = {
   viewMonth: number
   viewMonthLabel: string
   defaultEventColor: EventColor
+  defaultEventCategory: EventCategory
+  categoryColors: Partial<Record<EventCategory, EventColor>>
   setDefaultEventColor: (color: EventColor) => void
+  setDefaultEventCategory: (category: EventCategory) => void
+  getCategoryColor: (category: EventCategory) => EventColor
+  setCategoryColor: (category: EventCategory, color: EventColor) => void
   setActiveCalendarId: (id: string) => void
   goToToday: () => void
   goToPreviousMonth: () => void
@@ -125,8 +138,14 @@ export function CalendarsProvider({ children }: { children: ReactNode }) {
   const [events, setEvents] = useState<UserEvent[]>(initialState.events)
   const [viewYear, setViewYear] = useState(todayParts.year)
   const [viewMonth, setViewMonth] = useState(todayParts.month)
-  const [defaultEventColor, setDefaultEventColor] = useState<EventColor>(
+  const [defaultEventColor, setDefaultEventColorState] = useState<EventColor>(
     initialState.defaultEventColor,
+  )
+  const [defaultEventCategory, setDefaultEventCategoryState] = useState<EventCategory>(
+    initialState.defaultEventCategory ?? 'other',
+  )
+  const [categoryColors, setCategoryColors] = useState<Partial<Record<EventCategory, EventColor>>>(
+    initialState.categoryColors ?? createDefaultCategoryColors(),
   )
   const [personalVisibilityByShared, setPersonalVisibilityByShared] = useState<
     Record<string, string[]>
@@ -170,6 +189,27 @@ export function CalendarsProvider({ children }: { children: ReactNode }) {
     [personalVisibilityByShared],
   )
 
+  const getCategoryColor = useCallback(
+    (category: EventCategory) => getDefaultColorForCategory(category, categoryColors),
+    [categoryColors],
+  )
+
+  const setCategoryColor = useCallback((category: EventCategory, color: EventColor) => {
+    setCategoryColors((current) => ({ ...current, [category]: color }))
+  }, [])
+
+  const setDefaultEventCategory = useCallback(
+    (category: EventCategory) => {
+      setDefaultEventCategoryState(category)
+      setDefaultEventColorState(getDefaultColorForCategory(category, categoryColors))
+    },
+    [categoryColors],
+  )
+
+  const setDefaultEventColor = useCallback((color: EventColor) => {
+    setDefaultEventColorState(color)
+  }, [])
+
   useEffect(() => {
     savePersistedAppState({
       personalCalendars,
@@ -178,6 +218,8 @@ export function CalendarsProvider({ children }: { children: ReactNode }) {
       events,
       personalVisibilityByShared,
       defaultEventColor,
+      defaultEventCategory,
+      categoryColors,
     })
   }, [
     personalCalendars,
@@ -186,6 +228,8 @@ export function CalendarsProvider({ children }: { children: ReactNode }) {
     events,
     personalVisibilityByShared,
     defaultEventColor,
+    defaultEventCategory,
+    categoryColors,
   ])
 
   const goToDate = useCallback((date: string) => {
@@ -281,13 +325,15 @@ export function CalendarsProvider({ children }: { children: ReactNode }) {
           ? true
           : (options?.sharedVisible ?? false)
 
+      const category = normalizeEventCategory(options?.category ?? defaultEventCategory)
       const event: UserEvent = {
         id: crypto.randomUUID(),
         calendarId,
         title: trimmed,
         date,
         time: options?.time,
-        color: options?.color ?? defaultEventColor,
+        category,
+        color: options?.color ?? getDefaultColorForCategory(category, categoryColors),
         sharedVisible,
       }
 
@@ -295,7 +341,7 @@ export function CalendarsProvider({ children }: { children: ReactNode }) {
       goToDate(date)
       return event
     },
-    [activeCalendarId, allCalendars, defaultEventColor, goToDate],
+    [activeCalendarId, allCalendars, categoryColors, defaultEventCategory, goToDate],
   )
 
   const getEventById = useCallback(
@@ -314,6 +360,7 @@ export function CalendarsProvider({ children }: { children: ReactNode }) {
         title: updates.title?.trim() || existing.title,
         date: updates.date || existing.date,
         time: updates.time === undefined ? existing.time : updates.time || undefined,
+        category: updates.category ?? existing.category,
         color: updates.color ?? existing.color,
         sharedVisible:
           calendar?.kind === 'shared'
@@ -348,9 +395,12 @@ export function CalendarsProvider({ children }: { children: ReactNode }) {
             const calendarId = action.calendarId ?? activeCalendarId
             const calendarName =
               allCalendars.find((calendar) => calendar.id === calendarId)?.name ?? 'Calendar'
+            const category =
+              action.category !== undefined ? normalizeEventCategory(action.category) : undefined
             const created = addEvent(action.title, action.date, {
               calendarId: action.calendarId,
               time: getOptionalEventTime(action),
+              category,
               color: action.color !== undefined ? normalizeEventColor(action.color) : undefined,
             })
             if (created) {
@@ -409,6 +459,7 @@ export function CalendarsProvider({ children }: { children: ReactNode }) {
       viewMonth: viewMonthLabel,
       activeCalendar,
       defaultEventColor,
+      defaultEventCategory,
       personalCalendars,
       sharedCalendars,
       events: events.map((event) => ({
@@ -422,6 +473,7 @@ export function CalendarsProvider({ children }: { children: ReactNode }) {
       activeCalendar,
       allCalendars,
       defaultEventColor,
+      defaultEventCategory,
       events,
       personalCalendars,
       sharedCalendars,
@@ -444,7 +496,12 @@ export function CalendarsProvider({ children }: { children: ReactNode }) {
         viewMonth,
         viewMonthLabel,
         defaultEventColor,
+        defaultEventCategory,
+        categoryColors,
         setDefaultEventColor,
+        setDefaultEventCategory,
+        getCategoryColor,
+        setCategoryColor,
         setActiveCalendarId,
         goToToday,
         goToPreviousMonth,

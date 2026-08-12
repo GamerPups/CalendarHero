@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useCalendars, type UserEvent } from '../hooks/useCalendars'
-import type { EventColor } from '../lib/calendar-utils'
+import type { EventCategory, EventColor } from '../lib/calendar-utils'
+import {
+  getEventColorMeta,
+} from '../lib/calendar-utils'
+import { CategorySelect } from './CategorySelect'
 import { ColorSelect } from './ColorSelect'
 import { DEFAULT_TIME, TimeInput } from './TimeInput'
 
@@ -52,7 +56,8 @@ export function EventFormModal({ onClose, initialDate, event }: EventFormModalPr
     addEvent,
     updateEvent,
     deleteEvent,
-    defaultEventColor,
+    defaultEventCategory,
+    getCategoryColor,
     allCalendars,
   } = useCalendars()
 
@@ -62,26 +67,56 @@ export function EventFormModal({ onClose, initialDate, event }: EventFormModalPr
     : activeCalendar
   const isPersonalTarget = eventCalendar?.kind === 'personal'
 
+  const initialCategory = event?.category ?? defaultEventCategory
+  const initialColor = event?.color ?? getCategoryColor(initialCategory)
+
   const [title, setTitle] = useState(event?.title ?? '')
   const [date, setDate] = useState(event?.date ?? initialDate ?? '')
-  const [color, setColor] = useState<EventColor>(event?.color ?? defaultEventColor)
+  const [category, setCategory] = useState<EventCategory>(initialCategory)
+  const [color, setColor] = useState<EventColor>(initialColor)
+  const [useCustomColor, setUseCustomColor] = useState(
+    () => isEditing && event ? event.color !== getCategoryColor(initialCategory) : false,
+  )
   const [time, setTime] = useState(event?.time ?? DEFAULT_TIME)
   const [sharedVisible, setSharedVisible] = useState(event?.sharedVisible ?? false)
 
+  function handleCategoryChange(nextCategory: EventCategory) {
+    setCategory(nextCategory)
+    if (!useCustomColor) {
+      setColor(getCategoryColor(nextCategory))
+    }
+  }
+
+  function handleColorChange(nextColor: EventColor) {
+    setColor(nextColor)
+    setUseCustomColor(nextColor !== getCategoryColor(category))
+  }
+
+  function handleUseCustomColorChange(checked: boolean) {
+    setUseCustomColor(checked)
+    if (!checked) {
+      setColor(getCategoryColor(category))
+    }
+  }
+
   function handleSubmit(formEvent: React.FormEvent) {
     formEvent.preventDefault()
+
+    const resolvedColor = useCustomColor ? color : getCategoryColor(category)
 
     if (isEditing && event) {
       updateEvent(event.id, {
         title,
         date,
         time,
-        color,
+        category,
+        color: resolvedColor,
         sharedVisible: isPersonalTarget ? sharedVisible : undefined,
       })
     } else {
       addEvent(title, date, {
-        color,
+        category,
+        color: resolvedColor,
         time,
         sharedVisible: activeCalendar.kind === 'personal' ? sharedVisible : true,
       })
@@ -95,6 +130,8 @@ export function EventFormModal({ onClose, initialDate, event }: EventFormModalPr
     deleteEvent(event.id)
     onClose()
   }
+
+  const autoColor = getCategoryColor(category)
 
   return (
     <Modal title={isEditing ? 'Edit event' : 'Add event'} onClose={onClose}>
@@ -134,10 +171,31 @@ export function EventFormModal({ onClose, initialDate, event }: EventFormModalPr
           Time
         </label>
         <TimeInput id="event-time" value={time} onChange={setTime} />
-        <label className="field-label" htmlFor="event-color">
-          Color
+        <label className="field-label" htmlFor="event-category">
+          Category
         </label>
-        <ColorSelect id="event-color" value={color} onChange={setColor} />
+        <CategorySelect id="event-category" value={category} onChange={handleCategoryChange} />
+        <p className="field-hint">
+          {useCustomColor
+            ? 'Using a custom color for this event.'
+            : `Color is set automatically from category (${getEventColorMeta(autoColor).label}).`}
+        </p>
+        <label className="picker-option event-color-toggle">
+          <input
+            type="checkbox"
+            checked={useCustomColor}
+            onChange={(formEvent) => handleUseCustomColorChange(formEvent.target.checked)}
+          />
+          <span>Choose a custom color</span>
+        </label>
+        {useCustomColor ? (
+          <>
+            <label className="field-label" htmlFor="event-color">
+              Color
+            </label>
+            <ColorSelect id="event-color" value={color} onChange={handleColorChange} />
+          </>
+        ) : null}
         {(isPersonalTarget || activeCalendar.kind === 'personal') && !isEditing ? (
           <label className="picker-option event-share-toggle">
             <input

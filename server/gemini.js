@@ -35,7 +35,7 @@ When executing actions, append exactly this format at the end (user will not see
 <<<END_ACTIONS>>>
 
 Allowed action types:
-- create_event { title, date, time, calendarId?, color? } — time required as HH:MM (24h); color optional: cyan, sky, blue, indigo, violet, purple, fuchsia, pink, rose, red, coral, orange, amber, yellow, lime, green, emerald, teal, mint, gold, lavender, magenta, crimson, navy
+- create_event { title, date, time, calendarId?, category?, color? } — time required as HH:MM (24h); category optional: work, personal, social, health, travel, important, other (auto-assigns color); color optional override: cyan, sky, blue, indigo, violet, purple, fuchsia, pink, rose, red, coral, orange, amber, yellow, lime, green, emerald, teal, mint, gold, lavender, magenta, crimson, navy
 - switch_calendar { calendarId }
 - create_shared_calendar { name }
 - join_shared_calendar { shareCode }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useCalendars, type UserCalendar } from '../../hooks/useCalendars'
-import { EVENT_COLOR_PALETTE } from '../../lib/calendar-utils'
+import { CategorySelect } from '../CategorySelect'
 import {
   AddPersonalCalendarModal,
   CreateSharedCalendarModal,
@@ -129,51 +129,43 @@ function CalendarGroup({
 
 type MobileActionsSheetProps = SheetProps & {
   onAddEvent: () => void
+  onOpenSettings: () => void
 }
 
-export function MobileActionsSheet({ onClose, onAddEvent }: MobileActionsSheetProps) {
-  const { activeCalendar, defaultEventColor, setDefaultEventColor } = useCalendars()
+export function MobileActionsSheet({ onClose, onAddEvent, onOpenSettings }: MobileActionsSheetProps) {
+  const { activeCalendar, defaultEventCategory, setDefaultEventCategory } = useCalendars()
   const [showCreateShared, setShowCreateShared] = useState(false)
   const [showJoinShared, setShowJoinShared] = useState(false)
   const [showAddPersonal, setShowAddPersonal] = useState(false)
   const [showShareFromPersonal, setShowShareFromPersonal] = useState(false)
-  const [showColors, setShowColors] = useState(false)
+  const [showCategoryDefault, setShowCategoryDefault] = useState(false)
 
   function runAction(action: () => void) {
     onClose()
     action()
   }
 
-  if (showColors) {
+  if (showCategoryDefault) {
     return (
       <>
         <button type="button" className="m-sheet-backdrop" aria-label="Close" onClick={onClose} />
-        <div className="m-sheet" role="dialog" aria-modal="true" aria-label="Event colors">
+        <div className="m-sheet" role="dialog" aria-modal="true" aria-label="Default category">
           <div className="m-sheet-handle" aria-hidden />
           <div className="m-sheet-header">
-            <button type="button" className="m-sheet-back" onClick={() => setShowColors(false)}>
+            <button type="button" className="m-sheet-back" onClick={() => setShowCategoryDefault(false)}>
               ← Back
             </button>
-            <h2 className="m-sheet-title">Event colors</h2>
+            <h2 className="m-sheet-title">Default category</h2>
             <button type="button" className="m-sheet-close" onClick={onClose} aria-label="Close">
               ×
             </button>
           </div>
           <div className="m-sheet-body">
-            <p className="m-sheet-caption">Default color for new events in {activeCalendar.name}</p>
-            <div className="m-color-grid">
-              {EVENT_COLOR_PALETTE.map((color) => (
-                <button
-                  key={color.id}
-                  type="button"
-                  className={`m-color-swatch${color.id === defaultEventColor ? ' selected' : ''}`}
-                  style={{ background: color.hex }}
-                  title={color.label}
-                  aria-label={color.label}
-                  onClick={() => setDefaultEventColor(color.id)}
-                />
-              ))}
-            </div>
+            <p className="m-sheet-caption">New events on {activeCalendar.name} use this category and auto color.</p>
+            <CategorySelect
+              value={defaultEventCategory}
+              onChange={(category) => setDefaultEventCategory(category)}
+            />
           </div>
         </div>
       </>
@@ -225,8 +217,8 @@ export function MobileActionsSheet({ onClose, onAddEvent }: MobileActionsSheetPr
               <span>Show/hide personal events</span>
             </button>
           ) : null}
-          <button type="button" className="m-sheet-row" onClick={() => setShowColors(true)}>
-            <span>Event colors</span>
+          <button type="button" className="m-sheet-row" onClick={() => runAction(onOpenSettings)}>
+            <span>Settings & category colors</span>
           </button>
         </div>
       </div>

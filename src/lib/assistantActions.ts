@@ -5,6 +5,7 @@ export type CalendarAction =
       date: string
       time?: string
       calendarId?: string
+      category?: string
       color?: string
     }
   | { type: 'switch_calendar'; calendarId: string }
