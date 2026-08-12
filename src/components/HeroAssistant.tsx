@@ -3,6 +3,7 @@ import { checkChatHealth, sendChatMessages } from '../api/gemini'
 import { useCalendars } from '../hooks/useCalendars'
 import { ChatMessageText } from '../lib/chatMarkdown'
 import { ChatActionResults } from './ChatActionResults'
+import { getChatUnavailableMessage, getGeminiSetupMessage } from '../lib/geminiSetup'
 import type { AssistantActionResult } from '../lib/assistantResults'
 
 type HeroAssistantProps = {
@@ -67,9 +68,9 @@ export function HeroAssistant({ onClose }: HeroAssistantProps) {
     void checkChatHealth().then((health) => {
       setApiReady(health.ok)
       if (!health.geminiConfigured) {
-        setError('Add GEMINI_API_KEY to CalendarHero/.env and restart npm run dev.')
+        setError(getGeminiSetupMessage())
       } else if (!health.ok) {
-        setError('Chat API is unavailable. Run npm run dev from the CalendarHero folder.')
+        setError(getChatUnavailableMessage())
       }
     })
   }, [])

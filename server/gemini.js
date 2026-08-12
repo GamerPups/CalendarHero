@@ -55,7 +55,9 @@ ${JSON.stringify(calendarContext, null, 2)}`
 export async function generateGeminiReply(messages, calendarContext) {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is not configured. Add it to .env and restart the server.')
+    throw new Error(
+      'GEMINI_API_KEY is not configured. Set it in .env locally or in Vercel Environment Variables.',
+    )
   }
 
   const contents = messages.map((message) => ({

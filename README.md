@@ -39,6 +39,16 @@ Your calendars and events are saved in the browser automatically.
 | `GEMINI_MODEL` | Optional, defaults to `gemini-3.5-flash-lite` |
 | `PORT` | API port, defaults to `3001` |
 
+### Vercel deployment
+
+1. Deploy the repo on Vercel (framework preset: **Vite**).
+2. In Vercel → **Project Settings → Environment Variables**, add:
+   - `GEMINI_API_KEY` — your key from [Google AI Studio](https://aistudio.google.com/apikey)
+   - `GEMINI_MODEL` — optional, e.g. `gemini-3.5-flash-lite`
+3. Redeploy after saving env vars.
+
+The `/api/chat` and `/api/health` routes run as Vercel serverless functions in production.
+
 ## Scripts
 
 - `npm run dev` — frontend + built-in API (recommended)
