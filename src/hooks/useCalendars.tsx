@@ -305,33 +305,27 @@ export function CalendarsProvider({ children }: { children: ReactNode }) {
 
   const updateEvent = useCallback(
     (eventId: string, updates: UpdateEventInput) => {
-      let updated: UserEvent | null = null
+      const existing = events.find((event) => event.id === eventId)
+      if (!existing) return null
 
-      setEvents((current) =>
-        current.map((event) => {
-          if (event.id !== eventId) return event
+      const calendar = allCalendars.find((item) => item.id === existing.calendarId)
+      const next: UserEvent = {
+        ...existing,
+        title: updates.title?.trim() || existing.title,
+        date: updates.date || existing.date,
+        time: updates.time === undefined ? existing.time : updates.time || undefined,
+        color: updates.color ?? existing.color,
+        sharedVisible:
+          calendar?.kind === 'shared'
+            ? true
+            : updates.sharedVisible ?? existing.sharedVisible ?? false,
+      }
 
-          const calendar = allCalendars.find((item) => item.id === event.calendarId)
-          const next: UserEvent = {
-            ...event,
-            title: updates.title?.trim() || event.title,
-            date: updates.date || event.date,
-            time: updates.time === undefined ? event.time : updates.time || undefined,
-            color: updates.color ?? event.color,
-            sharedVisible:
-              calendar?.kind === 'shared'
-                ? true
-                : updates.sharedVisible ?? event.sharedVisible ?? false,
-          }
-          updated = next
-          return next
-        }),
-      )
-
-      if (updated?.date) goToDate(updated.date)
-      return updated
+      setEvents((current) => current.map((event) => (event.id === eventId ? next : event)))
+      goToDate(next.date)
+      return next
     },
-    [allCalendars, goToDate],
+    [allCalendars, events, goToDate],
   )
 
   const deleteEvent = useCallback((eventId: string) => {

@@ -8,7 +8,7 @@ export type DisplayEvent = UserEvent & {
 export function getEventsForCalendarView(
   activeCalendar: { id: string; kind: 'personal' | 'shared' },
   events: UserEvent[],
-  personalCalendars: Array<{ id: string }>,
+  personalCalendars: Array<{ id: string; name: string }>,
   personalVisibilityByShared: Record<string, string[]>,
 ): DisplayEvent[] {
   if (activeCalendar.kind === 'personal') {

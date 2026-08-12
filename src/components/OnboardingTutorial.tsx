@@ -70,8 +70,10 @@ export function OnboardingTutorial() {
       return
     }
 
+    const target = step.target
+
     function updateSpotlight() {
-      const element = document.querySelector(step.target!)
+      const element = document.querySelector(target)
       if (!element) {
         setSpotlight(null)
         return
@@ -102,16 +104,20 @@ export function OnboardingTutorial() {
   }
 
   function goNext() {
-    if (stepIndex >= TUTORIAL_STEPS.length - 1) {
-      finishTutorial()
-      return
-    }
-    setStepIndex(stepIndex + 1)
+    setStepIndex((current) => {
+      if (current === null || current >= TUTORIAL_STEPS.length - 1) {
+        finishTutorial()
+        return null
+      }
+      return current + 1
+    })
   }
 
   function goBack() {
-    if (stepIndex <= 0) return
-    setStepIndex(stepIndex - 1)
+    setStepIndex((current) => {
+      if (current === null || current <= 0) return current
+      return current - 1
+    })
   }
 
   const isCenter = step.placement === 'center' || !step.target
