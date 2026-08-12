@@ -1537,6 +1537,15 @@ input {
   line-height: 1;
 }
 
+.hero-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  cursor: default;
+}
+
 @media (min-width: 900px) {
   .pwa-install-banner {
     left: auto;

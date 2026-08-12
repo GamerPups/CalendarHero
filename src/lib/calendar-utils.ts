@@ -60,6 +60,8 @@ export function getEventChipStyle(color: EventColor): {
 
 export const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
+export const DAY_LABELS_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+
 export type MonthCell = {
   date: string
   day: number
