@@ -1,58 +1,63 @@
-import {
-  CALENDAR_WEEKS,
-  DAY_LABELS,
-  MOCK_EVENTS,
-  type CalendarEvent,
-} from '../data/mockCalendar'
-import { ColorPickerPopover, MapPinIcon } from './ColorPickerPopover'
-
-function EventBar({ event, colWidth }: { event: CalendarEvent; colWidth: number }) {
-  const left = `calc(${event.startCol} * ${colWidth}% + 2px)`
-  const width = `calc(${event.span} * ${colWidth}% - 4px)`
-  const top = `calc(${(event.week / 5) * 100}% + 32px)`
-
-  return (
-    <div
-      className={`event-bar ${event.color}`}
-      style={{ left, width, top }}
-    >
-      {event.title}
-    </div>
-  )
-}
-
-function PinLabel({ event, colWidth }: { event: CalendarEvent; colWidth: number }) {
-  if (!event.hasPin) return null
-  const left = `calc(${event.startCol} * ${colWidth}% + 6px)`
-  const top = `calc(${(event.week / 5) * 100}% + 56px)`
-
-  return (
-    <div className="event-pin" style={{ position: 'absolute', left, top }}>
-      <MapPinIcon />
-      Map Pin
-    </div>
-  )
-}
+import { buildMonthGrid, DAY_LABELS, todayIsoDate } from '../lib/calendar-utils'
+import { useCalendars } from '../hooks/useCalendars'
+import { CalendarActionBar } from './CalendarModals'
 
 export function CalendarGrid() {
-  const colWidth = 100 / 7
+  const {
+    activeCalendar,
+    activeCalendarEvents,
+    viewYear,
+    viewMonth,
+    viewMonthLabel,
+    goToToday,
+    goToPreviousMonth,
+    goToNextMonth,
+    goToDate,
+  } = useCalendars()
+
+  const today = todayIsoDate()
+  const monthCells = buildMonthGrid(viewYear, viewMonth)
 
   return (
     <div className="calendar-panel">
       <div className="calendar-header">
-        <h1 className="calendar-title">August 2026</h1>
+        <div className="calendar-header-left">
+          <h1 className="calendar-title">{viewMonthLabel}</h1>
+          <p className="calendar-active-meta">
+            Viewing <strong>{activeCalendar.name}</strong>
+            {activeCalendar.kind === 'personal' ? ' · Personal' : ' · Shared'}
+            {activeCalendar.shareCode && (
+              <>
+                {' '}
+                · Code: <code className="share-code">{activeCalendar.shareCode}</code>
+              </>
+            )}
+          </p>
+        </div>
         <div className="calendar-nav">
-          <button type="button" className="nav-arrow" aria-label="Previous month">
+          <button
+            type="button"
+            className="nav-arrow"
+            aria-label="Previous month"
+            onClick={goToPreviousMonth}
+          >
             ‹
           </button>
-          <button type="button" className="today-btn">
+          <button type="button" className="today-btn" onClick={goToToday}>
             Today
           </button>
-          <button type="button" className="nav-arrow" aria-label="Next month">
+          <button
+            type="button"
+            className="nav-arrow"
+            aria-label="Next month"
+            onClick={goToNextMonth}
+          >
             ›
           </button>
         </div>
       </div>
+
+      <CalendarActionBar />
 
       <div className="calendar-grid-wrapper">
         <div className="calendar-grid">
@@ -62,27 +67,28 @@ export function CalendarGrid() {
             </div>
           ))}
 
-          {CALENDAR_WEEKS.flat().map((day, index) => (
-            <div key={index} className="day-cell">
-              {day !== null && (
-                <span className={`day-number${day <= 3 && index >= 28 ? ' muted' : ''}`}>
-                  {day}
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
+          {monthCells.map((cell) => {
+            const eventsForDay = activeCalendarEvents.filter((event) => event.date === cell.date)
 
-        <div className="events-layer">
-          {MOCK_EVENTS.map((event) => (
-            <EventBar key={event.id} event={event} colWidth={colWidth} />
-          ))}
-          {MOCK_EVENTS.filter((e) => e.hasPin).map((event) => (
-            <PinLabel key={`pin-${event.id}`} event={event} colWidth={colWidth} />
-          ))}
+            return (
+              <button
+                key={cell.date}
+                type="button"
+                className={`day-cell day-cell-button${cell.date === today ? ' day-cell-today' : ''}`}
+                onClick={() => goToDate(cell.date)}
+              >
+                <span className={`day-number${cell.muted ? ' muted' : ''}`}>{cell.day}</span>
+                <div className="day-user-events">
+                  {eventsForDay.map((event) => (
+                    <div key={event.id} className={`day-event-chip ${event.color}`}>
+                      {event.title}
+                    </div>
+                  ))}
+                </div>
+              </button>
+            )
+          })}
         </div>
-
-        <ColorPickerPopover />
       </div>
     </div>
   )

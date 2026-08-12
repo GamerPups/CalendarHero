@@ -1,16 +1,32 @@
+import { useState } from 'react'
 import { Header } from './components/Header'
 import { CalendarGrid } from './components/CalendarGrid'
-import { HeroAssistant } from './components/HeroAssistant'
+import { HeroAssistant, HeroAssistantToggle } from './components/HeroAssistant'
+import { CalendarsProvider } from './hooks/useCalendars'
 import './styles/global.css'
 
-export function App() {
+function AppShell() {
+  const [heroOpen, setHeroOpen] = useState(true)
+
   return (
     <div className="app">
       <Header />
-      <main className="main">
+      <main className={`main${heroOpen ? '' : ' main-hero-closed'}`}>
         <CalendarGrid />
-        <HeroAssistant />
+        {heroOpen ? (
+          <HeroAssistant onClose={() => setHeroOpen(false)} />
+        ) : (
+          <HeroAssistantToggle onOpen={() => setHeroOpen(true)} />
+        )}
       </main>
     </div>
+  )
+}
+
+export function App() {
+  return (
+    <CalendarsProvider>
+      <AppShell />
+    </CalendarsProvider>
   )
 }

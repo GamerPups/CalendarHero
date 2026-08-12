@@ -1,3 +1,11 @@
+import { useEffect, useRef, useState } from 'react'
+import { sendChatMessages } from '../api/gemini'
+import { useCalendars } from '../hooks/useCalendars'
+
+type HeroAssistantProps = {
+  onClose: () => void
+}
+
 function SparkleIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -32,7 +40,63 @@ function SendIcon() {
   )
 }
 
-export function HeroAssistant() {
+const WELCOME_MESSAGE =
+  "Hi! I'm connected to your calendar. Try \"Schedule team meeting tomorrow at 3pm\" — I'll ask follow-ups if I need more details."
+
+type UiMessage = {
+  role: 'user' | 'assistant'
+  text: string
+}
+
+export function HeroAssistant({ onClose }: HeroAssistantProps) {
+  const { getChatContext, applyAssistantActions } = useCalendars()
+  const [prompt, setPrompt] = useState('')
+  const [messages, setMessages] = useState<UiMessage[]>([
+    { role: 'assistant', text: WELCOME_MESSAGE },
+  ])
+  const [isSending, setIsSending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, isSending])
+
+  async function handleSend() {
+    const trimmed = prompt.trim()
+    if (!trimmed || isSending) return
+
+    const nextMessages: UiMessage[] = [...messages, { role: 'user', text: trimmed }]
+    setPrompt('')
+    setMessages(nextMessages)
+    setIsSending(true)
+    setError(null)
+
+    try {
+      const result = await sendChatMessages(nextMessages, getChatContext())
+      const actionSummaries = applyAssistantActions(result.actions)
+      const replyText =
+        actionSummaries.length > 0
+          ? `${result.text}\n\n✓ ${actionSummaries.join(' ')}`
+          : result.text
+
+      setMessages((current) => [...current, { role: 'assistant', text: replyText }])
+    } catch (sendError) {
+      const message =
+        sendError instanceof Error ? sendError.message : 'Could not reach Gemini.'
+      setError(message)
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      void handleSend()
+    }
+  }
+
   return (
     <aside className="hero-sidebar">
       <div className="hero-header">
@@ -40,14 +104,28 @@ export function HeroAssistant() {
           <SparkleIcon />
           Hero Assistant
         </div>
-        <button type="button" className="hero-close" aria-label="Close">
+        <button type="button" className="hero-close" onClick={onClose} aria-label="Close">
           ×
         </button>
       </div>
 
       <div className="hero-body">
-        <RobotIcon />
-        <div className="chat-bubble">Schedule near chatbot.</div>
+        {messages.length <= 1 ? <RobotIcon /> : null}
+        <div className="hero-messages">
+          {messages.map((message, index) => (
+            <div
+              key={`${message.role}-${index}`}
+              className={`chat-bubble chat-bubble-${message.role}`}
+            >
+              {message.text}
+            </div>
+          ))}
+          {isSending ? (
+            <div className="chat-bubble chat-bubble-assistant chat-loading">Thinking…</div>
+          ) : null}
+          {error ? <div className="chat-error">{error}</div> : null}
+          <div ref={messagesEndRef} />
+        </div>
       </div>
 
       <div className="hero-input-area">
@@ -55,14 +133,32 @@ export function HeroAssistant() {
           <input
             className="hero-input"
             type="text"
-            defaultValue="Schedule team meeting tomorrow at 3 PM"
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="enter prompt here"
             aria-label="Message Hero Assistant"
+            disabled={isSending}
           />
-          <button type="button" className="hero-send" aria-label="Send">
+          <button
+            type="button"
+            className="hero-send"
+            aria-label="Send"
+            onClick={() => void handleSend()}
+            disabled={isSending || !prompt.trim()}
+          >
             <SendIcon />
           </button>
         </div>
       </div>
     </aside>
+  )
+}
+
+export function HeroAssistantToggle({ onOpen }: { onOpen: () => void }) {
+  return (
+    <button type="button" className="hero-open-btn" onClick={onOpen}>
+      Hero Assistant
+    </button>
   )
 }
