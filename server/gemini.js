@@ -1,5 +1,7 @@
+import { readJsonResponse } from './http.js'
+
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
-const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-2.0-flash'
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-3.5-flash-lite'
 
 const BASE_SYSTEM_PROMPT = `You are Hero Assistant in CalendarHero — a calendar app with personal and shared calendars.
 
@@ -12,19 +14,28 @@ Your job:
 
 ACTION RULES:
 - Do NOT emit actions until you have required fields.
-- For create_event you MUST have title and date (YYYY-MM-DD).
+- For create_event you MUST have title, date (YYYY-MM-DD), and time (HH:MM in 24-hour format, e.g. "15:00").
+- If the user did not give a time, ask for it before creating the event.
 - For join_shared_calendar you MUST have shareCode (XXXX-XXXX).
 - For create_shared_calendar you MUST have name.
 - For switch_calendar use calendarId from context.
 - Ask one clear follow-up question at a time when info is missing.
 
+RESPONSE FORMATTING:
+- Use short paragraphs separated by blank lines.
+- When confirming or listing events, format each event clearly with the time visible, for example:
+  **Team meeting**
+  Thu, Aug 15 · 3:00 PM
+- Do not clump everything into one dense paragraph.
+- When listing multiple events, use a bullet per event with title on one line and date/time on the next.
+
 When executing actions, append exactly this format at the end (user will not see it):
 <<<ACTIONS>>>
-[{ "type": "create_event", "title": "Team meeting", "date": "2026-08-15", "calendarId": "optional-id" }]
+[{ "type": "create_event", "title": "Team meeting", "date": "2026-08-15", "time": "15:00", "calendarId": "optional-id" }]
 <<<END_ACTIONS>>>
 
 Allowed action types:
-- create_event { title, date, calendarId?, color? } — color: cyan|purple|green|blue
+- create_event { title, date, time, calendarId?, color? } — time required as HH:MM (24h); color optional: cyan, sky, blue, indigo, violet, purple, fuchsia, pink, rose, red, coral, orange, amber, yellow, lime, green, emerald, teal, mint, gold, lavender, magenta, crimson, navy
 - switch_calendar { calendarId }
 - create_shared_calendar { name }
 - join_shared_calendar { shareCode }
@@ -66,7 +77,18 @@ export async function generateGeminiReply(messages, calendarContext) {
     },
   )
 
-  const payload = await response.json()
+  let payload
+  try {
+    payload = await readJsonResponse(response)
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Gemini returned an unreadable response.'
+    throw new Error(
+      response.ok
+        ? message
+        : `${message} (HTTP ${response.status}). Verify GEMINI_API_KEY and GEMINI_MODEL.`,
+    )
+  }
 
   if (!response.ok) {
     const message =

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useCalendars, type UserCalendar } from '../hooks/useCalendars'
 import { formatShareCode } from '../lib/shareCode'
-import { EVENT_COLORS, SWATCH_COLORS, SWATCH_TO_EVENT_COLOR } from '../lib/calendar-utils'
+import { resolvePersonalSelection } from '../lib/sharedVisibility'
+import { EVENT_COLOR_PALETTE } from '../lib/calendar-utils'
 
 type ModalProps = {
   title: string
@@ -39,79 +40,143 @@ function Modal({ title, onClose, children }: ModalProps) {
   )
 }
 
-export function AddEventModal({
-  onClose,
-  initialDate,
+function PersonalCalendarPicker({
+  personalCalendars,
+  selectedIds,
+  onChange,
 }: {
-  onClose: () => void
-  initialDate?: string
+  personalCalendars: UserCalendar[]
+  selectedIds: string[]
+  onChange: (ids: string[]) => void
 }) {
-  const { addEvent, activeCalendar, defaultEventColor } = useCalendars()
-  const [title, setTitle] = useState('')
-  const [date, setDate] = useState(initialDate ?? '')
-  const [color, setColor] = useState(defaultEventColor)
+  const allSelected = selectedIds.includes('__all__')
 
-  function handleSubmit(event: React.FormEvent) {
-    event.preventDefault()
-    addEvent(title, date, { color })
-    onClose()
+  function toggleCalendar(calendarId: string) {
+    if (allSelected) {
+      onChange([calendarId])
+      return
+    }
+
+    if (selectedIds.includes(calendarId)) {
+      onChange(selectedIds.filter((id) => id !== calendarId))
+      return
+    }
+
+    onChange([...selectedIds, calendarId])
+  }
+
+  function toggleAll() {
+    onChange(allSelected ? [] : ['__all__'])
+  }
+
+  if (personalCalendars.length === 0) {
+    return <p className="modal-hint">No personal calendars available.</p>
   }
 
   return (
-    <Modal title="Add event" onClose={onClose}>
-      <p className="modal-subtitle">
-        Adding to <strong>{activeCalendar.name}</strong>
-        {activeCalendar.shareCode && (
-          <>
-            {' '}
-            · <code className="share-code">{activeCalendar.shareCode}</code>
-          </>
-        )}
-      </p>
-      <form className="modal-form" onSubmit={handleSubmit}>
-        <label className="field-label" htmlFor="event-title">
-          Event title
+    <div className="personal-picker">
+      <p className="field-label">Show events from personal calendars on this shared view</p>
+      {personalCalendars.length > 1 ? (
+        <label className="picker-option">
+          <input type="checkbox" checked={allSelected} onChange={toggleAll} />
+          <span>All personal calendars</span>
+        </label>
+      ) : null}
+      {personalCalendars.map((calendar) => (
+        <label key={calendar.id} className="picker-option">
+          <input
+            type="checkbox"
+            checked={allSelected || selectedIds.includes(calendar.id)}
+            disabled={allSelected}
+            onChange={() => toggleCalendar(calendar.id)}
+          />
+          <span>{calendar.name}</span>
+        </label>
+      ))}
+    </div>
+  )
+}
+
+export function CreateSharedCalendarModal({ onClose }: { onClose: () => void }) {
+  const { personalCalendars, createSharedCalendar, setSharedPersonalVisibility } = useCalendars()
+  const [name, setName] = useState('')
+  const [created, setCreated] = useState<UserCalendar | null>(null)
+  const [selectedPersonalIds, setSelectedPersonalIds] = useState<string[]>([])
+
+  function handleCreate(event: React.FormEvent) {
+    event.preventDefault()
+    const calendar = createSharedCalendar(name)
+    const visibleIds = resolvePersonalSelection(personalCalendars, selectedPersonalIds)
+    setSharedPersonalVisibility(calendar.id, visibleIds)
+    setCreated(calendar)
+  }
+
+  function handleSaveVisibility() {
+    if (!created) return
+    const visibleIds = resolvePersonalSelection(personalCalendars, selectedPersonalIds)
+    setSharedPersonalVisibility(created.id, visibleIds)
+    onClose()
+  }
+
+  if (created) {
+    return (
+      <Modal title="Shared calendar created" onClose={onClose}>
+        <div className="modal-success">
+          <p>
+            <strong>{created.name}</strong> is a separate shared calendar.
+          </p>
+          <p className="share-code-label">Share code — copy now</p>
+          <p className="share-code-display">{created.shareCode}</p>
+          <PersonalCalendarPicker
+            personalCalendars={personalCalendars}
+            selectedIds={selectedPersonalIds}
+            onChange={setSelectedPersonalIds}
+          />
+          <p className="modal-hint">
+            Checked calendars show on this shared view. Unchecked stays private.
+          </p>
+          <div className="modal-actions">
+            <button type="button" className="btn-primary" onClick={handleSaveVisibility}>
+              Save &amp; done
+            </button>
+          </div>
+        </div>
+      </Modal>
+    )
+  }
+
+  return (
+    <Modal title="Create shared calendar" onClose={onClose}>
+      <form className="modal-form" onSubmit={handleCreate}>
+        <p className="modal-subtitle">
+          Creates a <strong>separate</strong> calendar with its own events and a{' '}
+          <strong>XXXX-XXXX</strong> code shown immediately.
+        </p>
+        <label className="field-label" htmlFor="shared-name">
+          Calendar name
         </label>
         <input
-          id="event-title"
+          id="shared-name"
           className="field-input"
           type="text"
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          placeholder="Team meeting"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="Family, Roommates, Team…"
           autoFocus
         />
-        <label className="field-label" htmlFor="event-date">
-          Date
-        </label>
-        <input
-          id="event-date"
-          className="field-input"
-          type="date"
-          value={date}
-          onChange={(event) => setDate(event.target.value)}
-        />
-        <label className="field-label" htmlFor="event-color">
-          Color
-        </label>
-        <select
-          id="event-color"
-          className="field-input"
-          value={color}
-          onChange={(event) => setColor(event.target.value as typeof color)}
-        >
-          {EVENT_COLORS.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
+        {personalCalendars.length > 0 ? (
+          <PersonalCalendarPicker
+            personalCalendars={personalCalendars}
+            selectedIds={selectedPersonalIds}
+            onChange={setSelectedPersonalIds}
+          />
+        ) : null}
         <div className="modal-actions">
           <button type="button" className="btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button type="submit" className="btn-primary" disabled={!title.trim() || !date}>
-            Add event
+          <button type="submit" className="btn-primary">
+            Create &amp; show code
           </button>
         </div>
       </form>
@@ -119,59 +184,55 @@ export function AddEventModal({
   )
 }
 
-export function CreateSharedCalendarModal({ onClose }: { onClose: () => void }) {
-  const { createSharedCalendar } = useCalendars()
-  const [name, setName] = useState('')
-  const [created, setCreated] = useState<UserCalendar | null>(null)
+export function ShareFromPersonalModal({ onClose }: { onClose: () => void }) {
+  const {
+    personalCalendars,
+    activeCalendar,
+    getVisiblePersonalOnShared,
+    setSharedPersonalVisibility,
+  } = useCalendars()
 
-  function handleSubmit(event: React.FormEvent) {
-    event.preventDefault()
-    setCreated(createSharedCalendar(name))
+  const [selectedPersonalIds, setSelectedPersonalIds] = useState<string[]>(() => {
+    if (activeCalendar.kind !== 'shared') return []
+    const current = getVisiblePersonalOnShared(activeCalendar.id)
+    if (current.length === personalCalendars.length && personalCalendars.length > 1) {
+      return ['__all__']
+    }
+    return current
+  })
+
+  function handleSave() {
+    if (activeCalendar.kind !== 'shared') return
+    const visibleIds = resolvePersonalSelection(personalCalendars, selectedPersonalIds)
+    setSharedPersonalVisibility(activeCalendar.id, visibleIds)
+    onClose()
+  }
+
+  if (activeCalendar.kind !== 'shared') {
+    return null
   }
 
   return (
-    <Modal title="Create shared calendar" onClose={onClose}>
-      {created ? (
-        <div className="modal-success">
-          <p>
-            <strong>{created.name}</strong> is ready to share.
-          </p>
-          <p className="share-code-label">Share code</p>
-          <p className="share-code-display">{created.shareCode}</p>
-          <p className="modal-hint">Others can join with this XXXX-XXXX code.</p>
-          <div className="modal-actions">
-            <button type="button" className="btn-primary" onClick={onClose}>
-              Done
-            </button>
-          </div>
-        </div>
-      ) : (
-        <form className="modal-form" onSubmit={handleSubmit}>
-          <p className="modal-subtitle">
-            Shared calendars get a unique <strong>XXXX-XXXX</strong> invite code.
-          </p>
-          <label className="field-label" htmlFor="shared-name">
-            Calendar name
-          </label>
-          <input
-            id="shared-name"
-            className="field-input"
-            type="text"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="Family, Roommates, Team…"
-            autoFocus
-          />
-          <div className="modal-actions">
-            <button type="button" className="btn-secondary" onClick={onClose}>
-              Cancel
-            </button>
-            <button type="submit" className="btn-primary">
-              Create shared calendar
-            </button>
-          </div>
-        </form>
-      )}
+    <Modal title="Show personal events on shared calendar" onClose={onClose}>
+      <p className="modal-subtitle">
+        Choose which personal calendars appear on <strong>{activeCalendar.name}</strong>.
+        {personalCalendars.length > 1
+          ? ' Pick one, several, or all.'
+          : ' Toggle visibility for your personal calendar.'}
+      </p>
+      <PersonalCalendarPicker
+        personalCalendars={personalCalendars}
+        selectedIds={selectedPersonalIds}
+        onChange={setSelectedPersonalIds}
+      />
+      <div className="modal-actions">
+        <button type="button" className="btn-secondary" onClick={onClose}>
+          Cancel
+        </button>
+        <button type="button" className="btn-primary" onClick={handleSave}>
+          Update visibility
+        </button>
+      </div>
     </Modal>
   )
 }
@@ -262,26 +323,32 @@ export function AddPersonalCalendarModal({ onClose }: { onClose: () => void }) {
   )
 }
 
-export function CalendarActionBar() {
-  const [showAddEvent, setShowAddEvent] = useState(false)
+export function CalendarActionBar({ onAddEvent }: { onAddEvent: () => void }) {
+  const { activeCalendar } = useCalendars()
   const [showCreateShared, setShowCreateShared] = useState(false)
   const [showJoinShared, setShowJoinShared] = useState(false)
   const [showAddPersonal, setShowAddPersonal] = useState(false)
+  const [showShareFromPersonal, setShowShareFromPersonal] = useState(false)
   const [showColorPicker, setShowColorPicker] = useState(false)
 
   return (
     <>
       <div className="calendar-actions">
-        <button
-          type="button"
-          className="action-btn action-btn-primary"
-          onClick={() => setShowAddEvent(true)}
-        >
+        <button type="button" className="action-btn action-btn-primary" onClick={onAddEvent}>
           + Add event
         </button>
         <button type="button" className="action-btn" onClick={() => setShowCreateShared(true)}>
           + Create shared calendar
         </button>
+        {activeCalendar.kind === 'shared' ? (
+          <button
+            type="button"
+            className="action-btn"
+            onClick={() => setShowShareFromPersonal(true)}
+          >
+            Show/hide personal events
+          </button>
+        ) : null}
         <button type="button" className="action-btn" onClick={() => setShowJoinShared(true)}>
           Join shared calendar
         </button>
@@ -292,9 +359,11 @@ export function CalendarActionBar() {
           Event colors
         </button>
       </div>
-      {showAddEvent && <AddEventModal onClose={() => setShowAddEvent(false)} />}
       {showCreateShared && (
         <CreateSharedCalendarModal onClose={() => setShowCreateShared(false)} />
+      )}
+      {showShareFromPersonal && (
+        <ShareFromPersonalModal onClose={() => setShowShareFromPersonal(false)} />
       )}
       {showJoinShared && <JoinSharedCalendarModal onClose={() => setShowJoinShared(false)} />}
       {showAddPersonal && <AddPersonalCalendarModal onClose={() => setShowAddPersonal(false)} />}
@@ -311,7 +380,6 @@ export function CalendarActionBar() {
 
 function ColorPickerPopoverInline({ onClose }: { onClose: () => void }) {
   const { activeCalendar, defaultEventColor, setDefaultEventColor } = useCalendars()
-  const selectedIndex = SWATCH_TO_EVENT_COLOR.indexOf(defaultEventColor)
 
   return (
     <>
@@ -322,14 +390,16 @@ function ColorPickerPopoverInline({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       <p className="color-popover-subtitle">Default color for new events</p>
-      <div className="color-swatches">
-        {SWATCH_COLORS.slice(0, 8).map((color, index) => (
+      <div className="color-swatches color-swatches-grid">
+        {EVENT_COLOR_PALETTE.map((color) => (
           <button
-            key={color}
+            key={color.id}
             type="button"
-            className={`color-swatch${index === selectedIndex ? ' selected' : ''}`}
-            style={{ background: color }}
-            onClick={() => setDefaultEventColor(SWATCH_TO_EVENT_COLOR[index])}
+            className={`color-swatch${color.id === defaultEventColor ? ' selected' : ''}`}
+            style={{ background: color.hex }}
+            title={color.label}
+            aria-label={color.label}
+            onClick={() => setDefaultEventColor(color.id)}
           />
         ))}
       </div>

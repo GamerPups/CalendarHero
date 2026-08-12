@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { sendChatMessages } from '../api/gemini'
+import { checkChatHealth, sendChatMessages } from '../api/gemini'
 import { useCalendars } from '../hooks/useCalendars'
+import { ChatMessageText } from '../lib/chatMarkdown'
+import { ChatActionResults } from './ChatActionResults'
+import type { AssistantActionResult } from '../lib/assistantResults'
 
 type HeroAssistantProps = {
   onClose: () => void
@@ -46,6 +49,7 @@ const WELCOME_MESSAGE =
 type UiMessage = {
   role: 'user' | 'assistant'
   text: string
+  actionResults?: AssistantActionResult[]
 }
 
 export function HeroAssistant({ onClose }: HeroAssistantProps) {
@@ -56,7 +60,19 @@ export function HeroAssistant({ onClose }: HeroAssistantProps) {
   ])
   const [isSending, setIsSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [apiReady, setApiReady] = useState<boolean | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    void checkChatHealth().then((health) => {
+      setApiReady(health.ok)
+      if (!health.geminiConfigured) {
+        setError('Add GEMINI_API_KEY to CalendarHero/.env and restart npm run dev.')
+      } else if (!health.ok) {
+        setError('Chat API is unavailable. Run npm run dev from the CalendarHero folder.')
+      }
+    })
+  }, [])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -74,13 +90,12 @@ export function HeroAssistant({ onClose }: HeroAssistantProps) {
 
     try {
       const result = await sendChatMessages(nextMessages, getChatContext())
-      const actionSummaries = applyAssistantActions(result.actions)
-      const replyText =
-        actionSummaries.length > 0
-          ? `${result.text}\n\n✓ ${actionSummaries.join(' ')}`
-          : result.text
+      const actionResults = applyAssistantActions(result.actions)
 
-      setMessages((current) => [...current, { role: 'assistant', text: replyText }])
+      setMessages((current) => [
+        ...current,
+        { role: 'assistant', text: result.text, actionResults },
+      ])
     } catch (sendError) {
       const message =
         sendError instanceof Error ? sendError.message : 'Could not reach Gemini.'
@@ -117,7 +132,16 @@ export function HeroAssistant({ onClose }: HeroAssistantProps) {
               key={`${message.role}-${index}`}
               className={`chat-bubble chat-bubble-${message.role}`}
             >
-              {message.text}
+              {message.role === 'assistant' ? (
+                <>
+                  <ChatMessageText text={message.text} />
+                  {message.actionResults?.length ? (
+                    <ChatActionResults results={message.actionResults} />
+                  ) : null}
+                </>
+              ) : (
+                message.text
+              )}
             </div>
           ))}
           {isSending ? (
@@ -138,7 +162,7 @@ export function HeroAssistant({ onClose }: HeroAssistantProps) {
             onKeyDown={handleKeyDown}
             placeholder="enter prompt here"
             aria-label="Message Hero Assistant"
-            disabled={isSending}
+            disabled={isSending || apiReady === false}
           />
           <button
             type="button"

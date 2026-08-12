@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="64" y1="32" x2="448" y2="480" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#00e5ff"/>
+      <stop offset="1" stop-color="#0099cc"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect x="96" y="136" width="320" height="280" rx="42" fill="#060d18" fill-opacity="0.92"/>
+  <path d="M160 88v72M352 88v72" stroke="#7ee8f7" stroke-width="24" stroke-linecap="round"/>
+  <path d="M96 200h320" stroke="#00d4ee" stroke-width="16" stroke-opacity="0.35"/>
+  <text x="256" y="360" text-anchor="middle" fill="#7ee8f7" font-family="Inter, Arial, sans-serif" font-size="144" font-weight="700">CH</text>
+</svg>

@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -9,12 +10,23 @@ import {
 import { generateShareCode, formatShareCode } from '../lib/shareCode'
 import {
   type EventColor,
-  EVENT_COLORS,
+  normalizeEventColor,
   formatMonthTitle,
   parseIsoDate,
   todayIsoDate,
 } from '../lib/calendar-utils'
 import type { CalendarAction } from '../lib/assistantActions'
+import type { AssistantActionResult } from '../lib/assistantResults'
+import { getOptionalEventTime } from '../lib/assistantResults'
+import {
+  getEventsForCalendarView,
+  type DisplayEvent,
+} from '../lib/sharedVisibility'
+import {
+  createEmptyAppState,
+  loadPersistedAppState,
+  savePersistedAppState,
+} from '../lib/appStorage'
 
 export type CalendarKind = 'personal' | 'shared'
 
@@ -30,7 +42,9 @@ export type UserEvent = {
   calendarId: string
   title: string
   date: string
+  time?: string
   color: EventColor
+  sharedVisible?: boolean
 }
 
 export type CalendarChatContext = {
@@ -46,6 +60,16 @@ export type CalendarChatContext = {
 type AddEventOptions = {
   calendarId?: string
   color?: EventColor
+  time?: string
+  sharedVisible?: boolean
+}
+
+type UpdateEventInput = {
+  title?: string
+  date?: string
+  time?: string
+  color?: EventColor
+  sharedVisible?: boolean
 }
 
 type CalendarsContextValue = {
@@ -55,7 +79,8 @@ type CalendarsContextValue = {
   activeCalendarId: string
   activeCalendar: UserCalendar
   events: UserEvent[]
-  activeCalendarEvents: UserEvent[]
+  displayEvents: DisplayEvent[]
+  activeCalendarEvents: DisplayEvent[]
   viewYear: number
   viewMonth: number
   viewMonthLabel: string
@@ -70,39 +95,42 @@ type CalendarsContextValue = {
   createSharedCalendar: (name: string) => UserCalendar
   joinSharedCalendar: (shareCode: string) => UserCalendar | null
   addEvent: (title: string, date: string, options?: AddEventOptions) => UserEvent | null
-  applyAssistantActions: (actions: CalendarAction[]) => string[]
+  updateEvent: (eventId: string, updates: UpdateEventInput) => UserEvent | null
+  deleteEvent: (eventId: string) => boolean
+  getEventById: (eventId: string) => UserEvent | undefined
+  setSharedPersonalVisibility: (sharedCalendarId: string, personalCalendarIds: string[]) => void
+  getVisiblePersonalOnShared: (sharedCalendarId: string) => string[]
+  applyAssistantActions: (actions: CalendarAction[]) => AssistantActionResult[]
   getChatContext: () => CalendarChatContext
 }
 
 const CalendarsContext = createContext<CalendarsContextValue | null>(null)
 
-const DEFAULT_PERSONAL_CALENDARS: UserCalendar[] = [
-  { id: 'personal-default', name: 'My Calendar', kind: 'personal' },
-  { id: 'personal-work', name: 'Work', kind: 'personal' },
-  { id: 'personal-family', name: 'Family', kind: 'personal' },
-]
-
+function readInitialState() {
+  return loadPersistedAppState() ?? createEmptyAppState()
+}
 
 export function CalendarsProvider({ children }: { children: ReactNode }) {
   const today = todayIsoDate()
   const todayParts = parseIsoDate(today)
+  const initialState = readInitialState()
 
   const [personalCalendars, setPersonalCalendars] = useState<UserCalendar[]>(
-    DEFAULT_PERSONAL_CALENDARS,
+    initialState.personalCalendars,
   )
-  const [sharedCalendars, setSharedCalendars] = useState<UserCalendar[]>([
-    {
-      id: 'shared-sample',
-      name: 'Sample coders',
-      kind: 'shared',
-      shareCode: 'H3RO-C0DE',
-    },
-  ])
-  const [activeCalendarId, setActiveCalendarId] = useState(DEFAULT_PERSONAL_CALENDARS[0].id)
-  const [events, setEvents] = useState<UserEvent[]>([])
+  const [sharedCalendars, setSharedCalendars] = useState<UserCalendar[]>(
+    initialState.sharedCalendars,
+  )
+  const [activeCalendarId, setActiveCalendarId] = useState(initialState.activeCalendarId)
+  const [events, setEvents] = useState<UserEvent[]>(initialState.events)
   const [viewYear, setViewYear] = useState(todayParts.year)
   const [viewMonth, setViewMonth] = useState(todayParts.month)
-  const [defaultEventColor, setDefaultEventColor] = useState<EventColor>('cyan')
+  const [defaultEventColor, setDefaultEventColor] = useState<EventColor>(
+    initialState.defaultEventColor,
+  )
+  const [personalVisibilityByShared, setPersonalVisibilityByShared] = useState<
+    Record<string, string[]>
+  >(initialState.personalVisibilityByShared)
 
   const allCalendars = useMemo(
     () => [...personalCalendars, ...sharedCalendars],
@@ -111,13 +139,54 @@ export function CalendarsProvider({ children }: { children: ReactNode }) {
 
   const activeCalendar =
     allCalendars.find((calendar) => calendar.id === activeCalendarId) ??
-    DEFAULT_PERSONAL_CALENDARS[0]
+    personalCalendars[0] ??
+    createEmptyAppState().personalCalendars[0]
 
-  const activeCalendarEvents = events.filter(
-    (event) => event.calendarId === activeCalendarId,
+  const displayEvents = useMemo(
+    () =>
+      getEventsForCalendarView(
+        activeCalendar,
+        events,
+        personalCalendars,
+        personalVisibilityByShared,
+      ),
+    [activeCalendar, events, personalCalendars, personalVisibilityByShared],
   )
 
   const viewMonthLabel = formatMonthTitle(viewYear, viewMonth)
+
+  const setSharedPersonalVisibility = useCallback(
+    (sharedCalendarId: string, personalCalendarIds: string[]) => {
+      setPersonalVisibilityByShared((current) => ({
+        ...current,
+        [sharedCalendarId]: personalCalendarIds,
+      }))
+    },
+    [],
+  )
+
+  const getVisiblePersonalOnShared = useCallback(
+    (sharedCalendarId: string) => personalVisibilityByShared[sharedCalendarId] ?? [],
+    [personalVisibilityByShared],
+  )
+
+  useEffect(() => {
+    savePersistedAppState({
+      personalCalendars,
+      sharedCalendars,
+      activeCalendarId,
+      events,
+      personalVisibilityByShared,
+      defaultEventColor,
+    })
+  }, [
+    personalCalendars,
+    sharedCalendars,
+    activeCalendarId,
+    events,
+    personalVisibilityByShared,
+    defaultEventColor,
+  ])
 
   const goToDate = useCallback((date: string) => {
     const parts = parseIsoDate(date)
@@ -206,12 +275,20 @@ export function CalendarsProvider({ children }: { children: ReactNode }) {
       const calendarId = options?.calendarId ?? activeCalendarId
       if (!allCalendars.some((item) => item.id === calendarId)) return null
 
+      const targetCalendar = allCalendars.find((item) => item.id === calendarId)
+      const sharedVisible =
+        targetCalendar?.kind === 'shared'
+          ? true
+          : (options?.sharedVisible ?? false)
+
       const event: UserEvent = {
         id: crypto.randomUUID(),
         calendarId,
         title: trimmed,
         date,
+        time: options?.time,
         color: options?.color ?? defaultEventColor,
+        sharedVisible,
       }
 
       setEvents((current) => [...current, event])
@@ -221,57 +298,115 @@ export function CalendarsProvider({ children }: { children: ReactNode }) {
     [activeCalendarId, allCalendars, defaultEventColor, goToDate],
   )
 
+  const getEventById = useCallback(
+    (eventId: string) => events.find((event) => event.id === eventId),
+    [events],
+  )
+
+  const updateEvent = useCallback(
+    (eventId: string, updates: UpdateEventInput) => {
+      let updated: UserEvent | null = null
+
+      setEvents((current) =>
+        current.map((event) => {
+          if (event.id !== eventId) return event
+
+          const calendar = allCalendars.find((item) => item.id === event.calendarId)
+          const next: UserEvent = {
+            ...event,
+            title: updates.title?.trim() || event.title,
+            date: updates.date || event.date,
+            time: updates.time === undefined ? event.time : updates.time || undefined,
+            color: updates.color ?? event.color,
+            sharedVisible:
+              calendar?.kind === 'shared'
+                ? true
+                : updates.sharedVisible ?? event.sharedVisible ?? false,
+          }
+          updated = next
+          return next
+        }),
+      )
+
+      if (updated?.date) goToDate(updated.date)
+      return updated
+    },
+    [allCalendars, goToDate],
+  )
+
+  const deleteEvent = useCallback((eventId: string) => {
+    let removed = false
+    setEvents((current) => {
+      const next = current.filter((event) => event.id !== eventId)
+      removed = next.length !== current.length
+      return next
+    })
+    return removed
+  }, [])
+
   const applyAssistantActions = useCallback(
     (actions: CalendarAction[]) => {
-      const summaries: string[] = []
+      const results: AssistantActionResult[] = []
 
       for (const action of actions) {
         switch (action.type) {
           case 'create_event': {
+            const calendarId = action.calendarId ?? activeCalendarId
+            const calendarName =
+              allCalendars.find((calendar) => calendar.id === calendarId)?.name ?? 'Calendar'
             const created = addEvent(action.title, action.date, {
               calendarId: action.calendarId,
-              color: EVENT_COLORS.includes(action.color as EventColor)
-                ? (action.color as EventColor)
-                : undefined,
+              time: getOptionalEventTime(action),
+              color: action.color !== undefined ? normalizeEventColor(action.color) : undefined,
             })
-            if (created) summaries.push(`Added "${created.title}" on ${created.date}.`)
+            if (created) {
+              results.push({
+                type: 'create_event',
+                title: created.title,
+                date: created.date,
+                time: created.time,
+                calendarName,
+              })
+            }
             break
           }
           case 'switch_calendar': {
             const target = allCalendars.find((calendar) => calendar.id === action.calendarId)
             if (target) {
               setActiveCalendarId(target.id)
-              summaries.push(`Switched to ${target.name}.`)
+              results.push({ type: 'switch_calendar', name: target.name })
             }
             break
           }
           case 'create_shared_calendar': {
             const created = createSharedCalendar(action.name)
-            summaries.push(
-              `Created shared calendar "${created.name}" with code ${created.shareCode}.`,
-            )
+            results.push({
+              type: 'create_shared_calendar',
+              name: created.name,
+              shareCode: created.shareCode ?? '',
+            })
             break
           }
           case 'join_shared_calendar': {
             const joined = joinSharedCalendar(action.shareCode)
             if (joined) {
-              summaries.push(`Joined shared calendar "${joined.name}".`)
+              results.push({ type: 'join_shared_calendar', name: joined.name })
             } else {
-              summaries.push('Could not join that share code.')
+              results.push({ type: 'error', message: 'Could not join that share code.' })
             }
             break
           }
           case 'go_to_date': {
             goToDate(action.date)
-            summaries.push(`Jumped to ${action.date}.`)
+            results.push({ type: 'go_to_date', date: action.date })
             break
           }
         }
       }
 
-      return summaries
+      return results
     },
-    [addEvent, allCalendars, createSharedCalendar, goToDate, joinSharedCalendar],
+    [activeCalendarId, addEvent, allCalendars, createSharedCalendar, goToDate, joinSharedCalendar],
   )
 
   const getChatContext = useCallback(
@@ -309,7 +444,8 @@ export function CalendarsProvider({ children }: { children: ReactNode }) {
         activeCalendarId,
         activeCalendar,
         events,
-        activeCalendarEvents,
+        displayEvents,
+        activeCalendarEvents: displayEvents,
         viewYear,
         viewMonth,
         viewMonthLabel,
@@ -324,6 +460,11 @@ export function CalendarsProvider({ children }: { children: ReactNode }) {
         createSharedCalendar,
         joinSharedCalendar,
         addEvent,
+        updateEvent,
+        deleteEvent,
+        getEventById,
+        setSharedPersonalVisibility,
+        getVisiblePersonalOnShared,
         applyAssistantActions,
         getChatContext,
       }}

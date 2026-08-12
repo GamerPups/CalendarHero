@@ -1,5 +1,12 @@
 export type CalendarAction =
-  | { type: 'create_event'; title: string; date: string; calendarId?: string; color?: string }
+  | {
+      type: 'create_event'
+      title: string
+      date: string
+      time?: string
+      calendarId?: string
+      color?: string
+    }
   | { type: 'switch_calendar'; calendarId: string }
   | { type: 'create_shared_calendar'; name: string }
   | { type: 'join_shared_calendar'; shareCode: string }
@@ -32,7 +39,8 @@ function isCalendarAction(value: unknown): value is CalendarAction {
       return (
         typeof action.title === 'string' &&
         typeof action.date === 'string' &&
-        /^\d{4}-\d{2}-\d{2}$/.test(action.date)
+        /^\d{4}-\d{2}-\d{2}$/.test(action.date) &&
+        (action.time === undefined || /^\d{2}:\d{2}$/.test(action.time))
       )
     case 'switch_calendar':
       return typeof action.calendarId === 'string'
